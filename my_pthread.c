@@ -8,6 +8,12 @@
 #include "my_pthread_t.h"
 #include "my_mem_manager.h"
 
+#undef malloc(x)
+#undef free(x)
+
+#define malloc(x) myallocate(x, __FILE__, __LINE__, 0)
+#define free(x) mydeallocate(x, __FILE__, __LINE__, 0)
+
 #define USE_MY_PTHREAD 1
 
 tcb *schd_t, *main_t;
@@ -19,7 +25,6 @@ static int init = 0, timer_hit = 0;
 static int NO_OF_MUTEX = 0;
 static int run = 0;
 
-static my_scheduler scheduler;
 struct itimerval timeslice;
 struct sigaction new_action;
 static int maintainence_count;
@@ -186,6 +191,8 @@ void signalTemp() {
 void make_scheduler() {
 //Create context for the scheduler thread
 	if (init == 0) {
+
+		init_mem_manager();
 
 		main_t = malloc(sizeof(tcb));
 
@@ -887,42 +894,4 @@ int my_pthread_mutex_destroy(my_pthread_mutex_t *mutex) {
 	return 0;
 }
 
-void * dummyFunction(tcb *thread) {
-	my_pthread_t curr_threadID = thread->tid;
-	printf("Entered Thread %i\n", curr_threadID);
-
-	int i = 0, j = 0, k = 0, l = 0;
-	for (i = 0; i < 100; i++) {
-		printf("Thread %d: %i\n", curr_threadID, i);
-
-		for (j = 0; j < 50000; j++)
-			k++;
-	}
-	printf("Exited Thread: %i\n", curr_threadID);
-	return &(thread->tid);
-}
-
-int main(int argc, char **argv) {
- pthread_t t1, t2, t3, t4;
- pthread_create(&t1, NULL, (void *) dummyFunction, &t1);
- pthread_create(&t2, NULL, (void *) dummyFunction, &t2);
- pthread_create(&t3, NULL, (void *) dummyFunction, &t3);
- pthread_create(&t4, NULL, (void *) dummyFunction, &t4);
-
- void ** op_val;
- int i = 0, j = 0, k = 0, l = 0;
- for (i = 0; i < 100; i++) {
- printf("Main: %d\n", i);
- if (i == 21) {
- pthread_join(t1, op_val);
- }
-
- for (j = 0; j < 50000; j++)
- k++;
- }
-
- printf("Done\n");
-
- return 0;
- }
 

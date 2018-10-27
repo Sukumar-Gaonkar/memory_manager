@@ -16,12 +16,19 @@
 #define malloc(x) myallocate(x, __FILE__, __LINE__, THREADREQ)
 #define free(x) mydeallocate(x, __FILE__, __LINE__, THREADREQ)
 
-static char main_mem[8*1024];
+#define MAIN_MEM_SIZE 8*1024*1024
+
 
 typedef struct memory_manager{
 	int page_size;
-	int mem_mgr_init;
+	int total_pages;
 }mem_manager;
+
+typedef struct inverted_pagetable_entry{
+	uint tid: 10;	// Allowing maximum 2014 threads
+	uint free: 1;
+	uint offset: 12;	// Assuming max PAGE_SIZE of the underlying system to be 4096 Bytes.
+} inv_pg_entry;
 
 
 

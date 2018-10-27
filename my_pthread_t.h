@@ -88,6 +88,8 @@ typedef struct my_scheduler_t {
 	thread_ret_val ret_vals;
 } my_scheduler;
 
+static my_scheduler scheduler;
+
 /* define your data structures here: */
 //const int no_of_queues = 5;
 
