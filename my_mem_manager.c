@@ -76,7 +76,7 @@ void * myallocate(size_t size, char *filename, int line_number , int flag){
 				printf("Main memory out of memory (8MB)!!!!");
 				return NULL;
 			}else {
-				inv_pg_entry *free_page = free_page = main_mem + (free_index * mem_mgr.page_size);
+				inv_pg_entry *free_page = main_mem + (free_index * mem_mgr.page_size);
 
 				free_page->tid = scheduler.running_thread->tid;
 				free_page->free = 0;

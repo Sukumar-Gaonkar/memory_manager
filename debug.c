@@ -20,7 +20,7 @@ int main(int argc, char **argv) {
 void * dummyFunction(tcb *thread) {
 	my_pthread_t curr_threadID = thread->tid;
 	printf("Entered Thread %i\n", curr_threadID);
-	int *iii = malloc(1000 * sizeof(int));
+//	int *iii = malloc(1000 * sizeof(int));
 	int i = 0, j = 0, k = 0, l = 0;
 	for (i = 0; i < 100; i++) {
 		printf("Thread %d: %i\n", curr_threadID, i);

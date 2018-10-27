@@ -16,7 +16,7 @@
 #define malloc(x) myallocate(x, __FILE__, __LINE__, THREADREQ)
 #define free(x) mydeallocate(x, __FILE__, __LINE__, THREADREQ)
 
-#define MAIN_MEM_SIZE 8*1024*1024
+#define MAIN_MEM_SIZE 1024*1024
 
 
 typedef struct memory_manager{
