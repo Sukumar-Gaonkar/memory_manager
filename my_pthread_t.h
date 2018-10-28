@@ -30,7 +30,7 @@
 #define pthread_mutex_destroy my_pthread_mutex_destroy
 #endif
 
-#define MEM 16384
+#define MEM 4096
 
 #define LEVELS 100
 #define TIME_QUANTUM 50

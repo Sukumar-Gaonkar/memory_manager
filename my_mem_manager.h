@@ -23,9 +23,15 @@
 
 typedef struct inverted_pagetable_entry {
 	uint tid :12;	// Allowing maximum 2048 threads
-	uint free :1;
-	uint offset :12;// Assuming max PAGE_SIZE of the underlying system to be 4096 Bytes.
+	uint is_alloc :1;
+	uint max_free :12;// Assuming max PAGE_SIZE of the underlying system to be 4096 Bytes.
 } inv_pg_entry;
+
+typedef struct pg_metadata {
+	uint free :1;
+	uint is_max_block: 1;
+	uint size :12;
+}pgm;
 
 //make bitsets of page table entries
 typedef struct page_table_entry {
@@ -40,13 +46,5 @@ typedef struct swap_data {
 	uint tid :12;
 	inv_pg_entry *pg_entry;
 } swap;
-
-typedef struct memory_manager {
-	int page_size;
-	int total_pages;
-} mem_manager;
-
-
-
 
 #endif /* MY_MEM_MANAGER_H_ */
