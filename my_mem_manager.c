@@ -8,7 +8,7 @@
 #include "my_pthread_t.h"
 #include "my_mem_manager.h"
 
-static char memory[MAIN_MEM_SIZE];
+static char *memory;
 inv_pg_entry *invt_pg_table;
 pte *page_table;
 swap *swap_table;
@@ -37,11 +37,13 @@ void init_mem_manager() {
 
 		//	Initialize Inverted Page Table and mem-align the pages
 		invt_pg_table = malloc(TOTAL_PAGES * sizeof(inv_pg_entry));
+		memory = malloc(sizeof(MAIN_MEM_SIZE));
+
+		memory = memalign(PAGE_SIZE, MAIN_MEM_SIZE);
 
 		int i = 0;
 		for (i = 0; i < TOTAL_PAGES; i++) {
 
-//			memory[i] = (int*) memalign(PAGE_SIZE, PAGE_SIZE);
 			invt_pg_table[i].tid = 0;
 			invt_pg_table[i].is_alloc = 0;
 			invt_pg_table[i].max_free = PAGE_SIZE - sizeof(pgm);
