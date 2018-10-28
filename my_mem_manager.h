@@ -19,6 +19,13 @@
 
 #define MAIN_MEM_SIZE 1024*1024//*8
 #define SWAP_SIZE 1024*1024*16
+#define SWAP_NAME "swap_space.swp"
+
+typedef struct inverted_pagetable_entry {
+	uint tid :12;	// Allowing maximum 2048 threads
+	uint free :1;
+	uint offset :12;// Assuming max PAGE_SIZE of the underlying system to be 4096 Bytes.
+} inv_pg_entry;
 
 //make bitsets of page table entries
 typedef struct page_table_entry {
@@ -28,22 +35,18 @@ typedef struct page_table_entry {
 	uint swap_page_no :12;
 } pte;
 
-typedef struct memory_manager {
-	int page_size;
-	int total_pages;
-	pte *page_table;
-} mem_manager;
-
-typedef struct inverted_pagetable_entry {
-	uint tid :12;	// Allowing maximum 2014 threads
-	uint free :1;
-	uint offset :12;// Assuming max PAGE_SIZE of the underlying system to be 4096 Bytes.
-} inv_pg_entry;
-
 typedef struct swap_data {
 	uint valid;
 	uint tid :12;
 	inv_pg_entry *pg_entry;
 } swap;
+
+typedef struct memory_manager {
+	int page_size;
+	int total_pages;
+} mem_manager;
+
+
+
 
 #endif /* MY_MEM_MANAGER_H_ */

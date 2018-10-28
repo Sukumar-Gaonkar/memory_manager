@@ -8,9 +8,12 @@
 #include "my_pthread_t.h"
 #include "my_mem_manager.h"
 
-static char main_mem[MAIN_MEM_SIZE];
+static char memory[MAIN_MEM_SIZE];
 inv_pg_entry *invt_pg_table;
+pte *page_table;
+swap *swap_table;
 int mem_manager_init = 0;
+FILE *swap_file;
 
 mem_manager mem_mgr;
 
@@ -23,13 +26,31 @@ void init_mem_manager() {
 		mem_mgr.total_pages = MAIN_MEM_SIZE / mem_mgr.page_size;
 		int i = 0;
 
-		//	Initialize Inverted Page Table
+		int PAGE_SIZE = sysconf(_SC_PAGE_SIZE);
+		int PAGES_IN_MEMORY = (MAIN_MEM_SIZE / PAGE_SIZE);
+		int PAGES_IN_SWAP = (SWAP_SIZE / PAGE_SIZE);
+		int MAX_THREADS = (PAGE_SIZE / (sizeof(ucontext_t) + 4)); // 4 for mementries
+		//int VALID_PAGES_MEM = PAGES_IN_MEMORY - 2;
+
+		page_table = malloc(sizeof(pte));
+		swap_table = malloc(sizeof(swap));
+
+		//	Initialize Inverted Page Table and mem-align the pages
 		invt_pg_table = malloc(mem_mgr.total_pages * sizeof(inv_pg_entry));
-		for (i = 0; i < mem_mgr.total_pages; i++) {
+
+		for (i = 0; i < PAGES_IN_MEMORY; i++) {
+
+			memory[i] = (int*) memalign(PAGE_SIZE, PAGE_SIZE);
 			invt_pg_table[i].tid = 0;
 			invt_pg_table[i].free = 1;
 			invt_pg_table[i].offset = 0;
 		}
+
+		//init swap space
+		swap_file = fopen(SWAP_NAME, "w+");
+
+		ftruncate(fileno(swap_file), 16 * 1024 * 1024);
+		close(fileno(swap_file));
 	}
 }
 
@@ -42,7 +63,7 @@ void * myallocate(size_t size, char *filename, int line_number, int flag) {
 
 	int alloc_complete = 0;
 	if (flag != THREADREQ) {
-		// TODO: dont call malloc, allocate space from kernel space of the main_mem
+		// TODO: dont call malloc, allocate space from kernel space of the memory
 		return malloc(size);
 	} else {
 
@@ -69,7 +90,7 @@ void * myallocate(size_t size, char *filename, int line_number, int flag) {
 							scheduler.running_thread->tid);
 					return NULL;
 				} else {
-					ret_val = main_mem + (itr * mem_mgr.page_size)
+					ret_val = memory + (itr * mem_mgr.page_size)
 							+ invt_pg_table[itr].offset; //&(invt_pg_table[itr]) + invt_pg_table[itr].offset;
 					invt_pg_table[itr].offset += size;
 					alloc_complete = 1;
@@ -83,7 +104,8 @@ void * myallocate(size_t size, char *filename, int line_number, int flag) {
 				printf("Main memory out of memory (8MB)!!!!");
 				return NULL;
 			} else {
-				inv_pg_entry *free_page = main_mem + (free_index * mem_mgr.page_size);
+				inv_pg_entry *free_page = memory
+						+ (free_index * mem_mgr.page_size);
 				free_page->tid = scheduler.running_thread->tid;
 				free_page->free = 0;
 				free_page->offset = size;
@@ -97,16 +119,16 @@ void * myallocate(size_t size, char *filename, int line_number, int flag) {
 void mydeallocate(void * ptr, char *filename, int line_number, int flag) {
 
 	int alloc_complete = 0;
-		if (flag != THREADREQ) {
-			free(ptr);
-		} else {
-			make_scheduler();
+	if (flag != THREADREQ) {
+		free(ptr);
+	} else {
+		make_scheduler();
 
-		}
+	}
 	return;
 }
 
-void addPTEntry(){
+void addPTEntry() {
 
 }
 

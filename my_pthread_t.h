@@ -1,4 +1,4 @@
- #ifndef MY_PTHREAD_T_H
+#ifndef MY_PTHREAD_T_H
 #define MY_PTHREAD_T_H
 
 #define _GNU_SOURCE
