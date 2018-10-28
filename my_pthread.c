@@ -23,7 +23,6 @@ static int mutex_id = 0;
 static int SYS_MODE = 0;
 static int init = 0, timer_hit = 0;
 static int NO_OF_MUTEX = 0;
-static int run = 0;
 
 struct itimerval timeslice;
 struct sigaction new_action;
@@ -62,8 +61,6 @@ void enqueue_running(tcb_list *queue, tcb *new_thread) {
 		queue->end->next = new_thread;
 		queue->end = new_thread;
 	}
-
-	//new_thread->next = NULL;
 }
 
 tcb* dequeue(tcb_list *queue) {
@@ -71,7 +68,6 @@ tcb* dequeue(tcb_list *queue) {
 	tcb *curr_tcb;
 
 	if (queue->start == NULL) {
-		//printf("Nothing in queue to dequeue\n");
 		return NULL;
 	}
 
@@ -84,7 +80,6 @@ tcb* dequeue(tcb_list *queue) {
 		if (queue->start == NULL) {
 			queue->end = NULL;
 		}
-		//curr_tcb->next = NULL;
 	}
 
 	return curr_tcb;
@@ -95,7 +90,6 @@ tcb* dequeue_running(tcb *queue) {
 	tcb *curr_tcb;
 
 	if (queue == NULL) {
-		//printf("Nothing in queue to dequeue\n");
 		return NULL;
 	}
 
@@ -104,7 +98,6 @@ tcb* dequeue_running(tcb *queue) {
 		queue = NULL;
 	} else {
 		queue = queue->next;
-		//queue->start = queue->start->next;
 		curr_tcb->next = NULL;
 	}
 
@@ -113,10 +106,9 @@ tcb* dequeue_running(tcb *queue) {
 
 void delete_from_queue(tcb_list *queue, tcb *todel_tcb) {
 	if (todel_tcb == NULL) {
-		printf("Deleting NULL tcb\n");
 		return;
 	} else if (queue->start == NULL) {
-		//printf("Deleting from empty Queue\n");
+		return;
 	} else if (queue->start == todel_tcb) {
 		queue->start = queue->start->next;
 		if (queue->start == NULL)
@@ -134,10 +126,7 @@ void delete_from_queue(tcb_list *queue, tcb *todel_tcb) {
 		curr_tcb = curr_tcb->next;
 	}
 
-	if (curr_tcb == NULL) {
-		//printf("Given tcb not found in Queue\n");
-		return;
-	} else {
+	if (curr_tcb != NULL) {
 		trail_pointer->next = curr_tcb->next;
 		curr_tcb->next = NULL;
 	}
@@ -178,9 +167,9 @@ void reset_timer() {
 	timeslice.it_interval.tv_usec = 0;
 	timeslice.it_interval.tv_sec = 0;
 
-	if (setitimer(ITIMER_VIRTUAL, &timeslice, NULL))
+	if (setitimer(ITIMER_VIRTUAL, &timeslice, NULL)) {
 		printf("Couldn't start the timer\n");
-	//printf("resetTimer: %d\n", timeslice.it_value.tv_usec);
+	}
 
 }
 
@@ -242,8 +231,6 @@ void make_scheduler() {
 
 		init_priority_queue(scheduler.priority_queue);
 
-		//enqueue(scheduler.priority_queue[0], main_t);
-
 		scheduler.running_thread = main_t;
 		scheduler.running_queue = main_t;
 
@@ -255,7 +242,6 @@ void make_scheduler() {
 		reset_timer();
 
 		init = 1;
-		//pthread_yield();
 	}
 
 }
@@ -340,11 +326,9 @@ int holds_mutex(tcb *t) {
 
 void schd_maintenence() {
 
-	//printf("Maintenance Cycle\n");
-
 	int i = 0;		//levels
 
-//First order of business, promote all threads by 1
+	//First order of business, promote all threads by 1
 	for (i = 1; i < LEVELS; i++) {
 		if (scheduler.priority_queue[i]->start != NULL) {
 			tcb *temp = NULL;
@@ -355,7 +339,7 @@ void schd_maintenence() {
 		}
 	}
 
-//Now demote processes in running queue
+	//Now demote processes in running queue
 
 	tcb* temp = scheduler.running_queue;
 
@@ -380,20 +364,19 @@ void schd_maintenence() {
 			}
 			tcb *next_tcb = temp->next;
 			enqueue(scheduler.priority_queue[temp->priority], temp);
-			//if(next_tcb)
+
 			temp = next_tcb;
 
 		} else {
 			//cannot delete the tcb as we need return values
 			temp = temp->next;
-			//continue;
 		}
 
 	}
 
 	scheduler.running_queue = NULL;
 
-//Rebuild the running queue for the scheduler from every level, assigning new quantas
+	//Rebuild the running queue for the scheduler from every level, assigning new quantas
 
 	for (i = 0; i < LEVELS; i++) {
 		if (scheduler.priority_queue[i]->start != NULL) {
@@ -420,22 +403,17 @@ void schd_maintenence() {
 
 	scheduler.running_thread = scheduler.running_queue;
 	maintainence_count++;
-	//printf("Exited Maintenence Cycle\n");
 
 }
 
 /* give CPU pocession to other user level threads voluntarily */
 int my_pthread_yield() {
 
-	//printf("Yield entered\n");
-
 	SYS_MODE = 1;
 	int m_Called = 0;
 	make_scheduler();
 
-	//if (run > 0) {
 	tcb *prev_thread = scheduler.running_thread;
-	//tcb *running = scheduler.running_queue;
 
 	//change statuses of all running threads
 	if (prev_thread != NULL) {
@@ -443,7 +421,6 @@ int my_pthread_yield() {
 			prev_thread->state = READY;
 		}
 		prev_thread->run_count += prev_thread->current_ts / TIME_QUANTUM;//update runs count
-		//running = running->next;
 	}
 
 	//end of one cycle
@@ -471,7 +448,6 @@ int my_pthread_yield() {
 			to_thread = scheduler.running_thread;
 			to_thread->state = RUNNING;
 			t_slice.it_value.tv_usec = scheduler.running_thread->current_ts;
-			//scheduler.running_thread = scheduler.running_thread->next;
 		}
 
 		if (scheduler.running_thread->next != NULL && m_Called == 0) {
@@ -482,7 +458,6 @@ int my_pthread_yield() {
 		}
 
 	} else {
-		//reset_timer();
 		t_slice.it_value.tv_usec = 0;
 	}
 
@@ -491,21 +466,13 @@ int my_pthread_yield() {
 	t_slice.it_interval.tv_usec = 0;
 	setitimer(ITIMER_VIRTUAL, &t_slice, NULL);
 
-	//printf("prev: %d next: %d\n", prev_thread->tid, to_thread->tid);
-//	printf("rec: %p   next: %p\n", &prev_thread->ucontext,
-//			&to_thread->ucontext);
-
 	SYS_MODE = 0;
 
 	if (swapcontext(&prev_thread->ucontext, &to_thread->ucontext) == -1) {
 		printf("Swapcontext Failed %d %s\n", errno, strerror(errno));
 		return -1;
 	}
-	/*} else {
-	 run++;
-	 }
-	 */
-	//printf("Yield exited\n");
+
 	return 0;
 }
 
@@ -732,7 +699,6 @@ int my_pthread_mutex_init(my_pthread_mutex_t *mutex,
 	mutex->tid = 0;
 	mutex->m_wait_queue = (tcb_list *) malloc(sizeof(tcb_list));
 	init_queue(&(mutex->m_wait_queue));
-	//printf("Scheduler mutex %p\n", scheduler.mutex_list);
 	enqueue_mutex(scheduler.mutex_list, mutex);
 	SYS_MODE = 0;
 	return 0;
