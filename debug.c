@@ -52,6 +52,7 @@ int main(int argc, char **argv) {
 	}
 
 	printf("Done\n");
-
+	void *value_ptr = NULL;
+	pthread_exit(value_ptr);
 	return 0;
 }

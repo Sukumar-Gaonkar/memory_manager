@@ -32,14 +32,14 @@ void init_mem_manager() {
 		PAGES_IN_SWAP = (SWAP_SIZE / PAGE_SIZE);
 		MAX_THREADS = 256;
 
-		page_table = malloc(sizeof(pte));
-		swap_table = malloc(sizeof(swap));
+		page_table = (pte*)malloc(sizeof(pte));
+		swap_table = (swap*)malloc(sizeof(swap));
 
 		//	Initialize Inverted Page Table and mem-align the pages
 		invt_pg_table = malloc(TOTAL_PAGES * sizeof(inv_pg_entry));
-		memory = malloc(sizeof(MAIN_MEM_SIZE));
+		memory = (char*)malloc(sizeof(MAIN_MEM_SIZE));
 
-		memory = memalign(PAGE_SIZE, MAIN_MEM_SIZE);
+		memory = (char*)memalign(PAGE_SIZE, MAIN_MEM_SIZE);
 
 		int i = 0;
 		for (i = 0; i < TOTAL_PAGES; i++) {

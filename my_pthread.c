@@ -492,6 +492,20 @@ void free_queue(tcb_list *list) {
 	}
 }
 
+void delete_tcb(tcb* head) {
+	/* deref head_ref to get the real head */
+	tcb *current = head;
+	tcb* next;
+
+	while (current != NULL) {
+		next = current->next;
+		free(current);
+		current = next;
+	}
+
+	head = NULL;
+}
+
 /* terminate a thread */
 void my_pthread_exit(void *value_ptr) {
 	/*
@@ -499,7 +513,6 @@ void my_pthread_exit(void *value_ptr) {
 	 * deallocate wait queue
 	 * call scheduler for the next process
 	 */
-	printf("Exit called");
 	make_scheduler();
 	SYS_MODE = 1;
 
@@ -518,12 +531,16 @@ void my_pthread_exit(void *value_ptr) {
 	}
 
 	int i = 0;
-	if (scheduler.running_thread->tid == 0) {
+	if (scheduler.running_thread->tid == 1) {
 		// Main thread exited, thus kill all children
-		printf("Main Thread exiting, Killing all other threads");
-		for (i = 0; i < LEVELS && scheduler.priority_queue[i]->start != NULL;
-				i++) {
-			free_queue(scheduler.priority_queue[i]);
+		printf("Main Thread exiting\n");
+
+		delete_tcb(scheduler.running_queue);
+
+		for (i = 0; i < LEVELS; i++) {
+			if (scheduler.priority_queue[i]->start != NULL) {
+				free_queue(scheduler.priority_queue[i]);
+			}
 		}
 		return;
 	}
@@ -532,7 +549,6 @@ void my_pthread_exit(void *value_ptr) {
 	scheduler.running_thread->return_val = value_ptr;
 
 	my_pthread_yield();
-	printf("Exit done");
 }
 
 //check in the running queue too
