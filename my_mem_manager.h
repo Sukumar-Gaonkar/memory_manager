@@ -21,10 +21,29 @@
 #define SWAP_SIZE 1024*1024*16
 #define SWAP_NAME "swap_space.swp"
 
+/*
+ * Thread Page Table
+ *
+ *  A array of arrays, where each sub array has info for all the virtual pages the thread owns.
+ *  Array was used instead of linked list as data structure to represent each virtual page to,
+ *  avoid storing a pointer(32 bits) to the next virtual page entry.
+ */
+pte *th_pg_tb[MAX_THREADS];
+
+//make bitsets of page table entries
+typedef struct page_table_entry {
+	uint used :1;			// What is this for?
+	uint in_memory :1;		//if not then check in swap
+	uint dirty: 1;			// is it necessary to write this
+	uint mem_page_no :12;
+	uint swap_page_no :12;
+} pte;
+
 typedef struct inverted_pagetable_entry {
-	uint tid :12;	// Allowing maximum 2048 threads
+	uint tid :12;		// Allowing maximum 2048 threads
 	uint is_alloc :1;
-	uint max_free :12;// Assuming max PAGE_SIZE of the underlying system to be 4096 Bytes.
+//	uint pg_no: 12;		// Used for page replacement Algorithms.
+	uint max_free :12;	// Assuming max PAGE_SIZE of the underlying system to be 4096 Bytes.
 } inv_pg_entry;
 
 typedef struct pg_metadata {
@@ -32,14 +51,6 @@ typedef struct pg_metadata {
 	uint is_max_block: 1;
 	uint size :12;
 }pgm;
-
-//make bitsets of page table entries
-typedef struct page_table_entry {
-	uint used :1;
-	uint in_memory :1;	//if not then check in swap
-	uint mem_page_no :15;
-	uint swap_page_no :12;
-} pte;
 
 typedef struct swap_data {
 	uint valid;

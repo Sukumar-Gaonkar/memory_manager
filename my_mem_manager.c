@@ -42,6 +42,7 @@ void init_mem_manager() {
 		memory = (char*)memalign(PAGE_SIZE, MAIN_MEM_SIZE);
 
 		int i = 0;
+		// Init Inverted Page Table
 		for (i = 0; i < TOTAL_PAGES; i++) {
 
 			invt_pg_table[i].tid = 0;
@@ -51,6 +52,17 @@ void init_mem_manager() {
 			pg_addr->free = 1;
 			pg_addr->size = PAGE_SIZE - sizeof(pgm);
 			pg_addr->is_max_block = 1;
+		}
+
+
+		//Init Thread Page Table
+		for(i = 0;i < MAX_THREADS; i++){
+			th_pg_tb[i] = (pte *) malloc(TOTAL_PAGES * sizeof(pte));
+			th_pg_tb[i]->used = 0;
+			th_pg_tb[i]->in_memory = 1;		//if not then check in swap
+			th_pg_tb[i]->dirty = 0;			// is it necessary to write this
+			th_pg_tb[i]->mem_page_no = i;
+			th_pg_tb[i]->swap_page_no = 0;
 		}
 
 		//init swap space
