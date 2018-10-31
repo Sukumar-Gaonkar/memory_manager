@@ -46,9 +46,9 @@ int main(int argc, char **argv) {
 			pthread_join(t2, NULL);
 		}
 
-		tot_mem += 500;
+		tot_mem += 1000;
 		printf("Main: tot: %d\n", tot_mem);
-		printf("%p\n", malloc(500));
+		printf("%p\n", malloc(1000));
 	}
 
 	printf("Done\n");

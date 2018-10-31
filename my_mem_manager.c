@@ -4,12 +4,12 @@
  *  Created on: Oct 25, 2018
  *      Author: sg1425
  */
-
+#include <sys/mman.h>
 #include "my_pthread_t.h"
 #include "my_mem_manager.h"
 
 static char *memory;
-inv_pg_entry *invt_pg_table;
+inv_pte *invt_pg_table;
 pte *page_table;
 swap *swap_table;
 int mem_manager_init = 0;
@@ -24,6 +24,13 @@ int MAX_THREADS = 0;
 #undef malloc(x)
 #undef free(x)
 
+struct sigaction mem_access_sigact;
+
+static void mem_access_handler(int sig, siginfo_t *si, void *unused)
+{
+   printf("Got SIGSEGV at address: 0x%lx\n",(long) si->si_addr);
+}
+
 void init_mem_manager() {
 	if (mem_manager_init == 0) {
 
@@ -36,12 +43,12 @@ void init_mem_manager() {
 		swap_table = (swap*)malloc(sizeof(swap));
 
 		//	Initialize Inverted Page Table and mem-align the pages
-		invt_pg_table = malloc(TOTAL_PAGES * sizeof(inv_pg_entry));
+		invt_pg_table = malloc(TOTAL_PAGES * sizeof(inv_pte));
 		memory = (char*)malloc(sizeof(MAIN_MEM_SIZE));
 
 		memory = (char*)memalign(PAGE_SIZE, MAIN_MEM_SIZE);
 
-		int i = 0;
+		int i = 0, j = 0;
 		// Init Inverted Page Table
 		for (i = 0; i < TOTAL_PAGES; i++) {
 
@@ -54,15 +61,10 @@ void init_mem_manager() {
 			pg_addr->is_max_block = 1;
 		}
 
-
 		//Init Thread Page Table
+		th_pg_tb = (pte **) malloc(MAX_THREADS * sizeof(pte *));
 		for(i = 0;i < MAX_THREADS; i++){
-			th_pg_tb[i] = (pte *) malloc(TOTAL_PAGES * sizeof(pte));
-			th_pg_tb[i]->used = 0;
-			th_pg_tb[i]->in_memory = 1;		//if not then check in swap
-			th_pg_tb[i]->dirty = 0;			// is it necessary to write this
-			th_pg_tb[i]->mem_page_no = i;
-			th_pg_tb[i]->swap_page_no = 0;
+			th_pg_tb[i] = NULL;
 		}
 
 		//init swap space
@@ -71,6 +73,20 @@ void init_mem_manager() {
 		ftruncate(fileno(swap_file), 16 * 1024 * 1024);
 		close(fileno(swap_file));
 		mem_manager_init = 1;
+
+		// Protect all pages
+		mprotect(memory, sizeof(memory),PROT_NONE);
+
+		// Register Handler
+		mem_access_sigact.sa_flags = SA_SIGINFO;
+		sigemptyset(&mem_access_sigact.sa_mask);
+		mem_access_sigact.sa_sigaction = mem_access_handler;
+
+		if (sigaction(SIGSEGV, &mem_access_sigact, NULL) == -1)
+		{
+			printf("Fatal error setting up signal handler\n");
+			exit(EXIT_FAILURE);    //explode!
+		}
 	}
 }
 
@@ -84,15 +100,78 @@ void split_pg_block(pgm *itr_addr, int size){
 	itr_addr->size = size;
 }
 
+/*
+ *	Find a free page in main memory
+ */
+int find_free_page(){
+	int pg_no;
 
-//have to store the metadata of the page separately and not in an inverted page table
-//dealloc with use that metadata to figure out the bytes allocated and mark the page as free
-//if the total page is free and not partial
-//Figure out total free or partial free????
+	for(pg_no = 0; pg_no < TOTAL_PAGES && invt_pg_table[pg_no].is_alloc == 1 ; pg_no++);
+
+	if(pg_no == TOTAL_PAGES){
+		// No space left in main memory.
+		return -1;
+	}else{
+		return pg_no;
+	}
+}
+
+void *allocate_in_page(int tid, int pg_no, int size){
+
+	// Update Inverted Page Table
+	inv_pte *free_pg_entry = &(invt_pg_table[pg_no]); //memory + (free_index * PAGE_SIZE);
+	free_pg_entry->tid = tid;
+	free_pg_entry->is_alloc = 1;
+	free_pg_entry->max_free = free_pg_entry->max_free - sizeof(pgm) - size;
+
+	pgm *free_page = memory + (pg_no * PAGE_SIZE);
+	split_pg_block(free_page, size);
+	free_page->is_max_block = 0;
+	((pgm *)((void *)free_page + sizeof(pgm) + size))->is_max_block = 1;
+
+	return (void *)free_page + sizeof(pgm);
+}
+
+void *init_pte(int pg_no){
+
+	// Create a new Page Table Entry for the page
+	pte *new_pte = (pte *)malloc(sizeof(pte));
+
+	new_pte->used = 1;
+	new_pte->in_memory = 1;
+	new_pte->dirty = 0;
+	new_pte->mem_page_no = pg_no;
+	new_pte->swap_page_no = 0;
+	new_pte->next = NULL;
+}
+
+void swap_pages(int pg1, int pg2){
+
+	// Verify if valid swap
+	if(pg1 == pg2)
+		return;
+
+	// Update Inverted Page Table
+	inv_pte *p1 = &(invt_pg_table[pg1]);
+	inv_pte *p2 = &(invt_pg_table[pg2]);
+	void *holder = malloc (sizeof(inv_pte));
+	memcpy(holder , p1, sizeof(inv_pte));
+	memcpy(p1, p2, sizeof(inv_pte));
+	memcpy(p2, holder, sizeof(inv_pte));
+
+	void *mem_pg1 = memory + (pg1 * PAGE_SIZE);
+	void *mem_pg2 = memory + (pg2 * PAGE_SIZE);
+
+	// Perform actual swap in Main memory
+	void *temp = malloc(PAGE_SIZE);
+	memcpy(temp, mem_pg1, PAGE_SIZE);
+	memcpy(mem_pg1, mem_pg2, PAGE_SIZE);
+	memcpy(mem_pg2, temp, PAGE_SIZE);
+}
 
 void * myallocate(size_t size, char *filename, int line_number, int flag) {
 
-	int alloc_complete = 0;
+	int alloc_complete = 0, i = 0, j = 0, pg_no = 0;
 	if (flag != THREADREQ) {
 		// TODO: dont call malloc, allocate space from kernel space of the memory
 		return malloc(size);
@@ -101,83 +180,115 @@ void * myallocate(size_t size, char *filename, int line_number, int flag) {
 		make_scheduler();
 
 		void *ret_val;
-		int itr;
-		int free_index = -1;
-		for (itr = 0; itr < TOTAL_PAGES && alloc_complete == 0; itr++) {
+		int tid = scheduler.running_thread->tid;
 
-			// Keep track of the first free page found
-			if (free_index == -1 && invt_pg_table[itr].is_alloc == 0) {
-				free_index = itr;
-			}
+		if(th_pg_tb[tid] == NULL){
+			// The threads is asking for the page for the first time.
 
-			if (invt_pg_table[itr].tid == scheduler.running_thread->tid) {
-				// The current thread already owns a page.
-				if (size > invt_pg_table[itr].max_free) {
-					// The current thread has asked for more memory than the size of a PAGE in total.
-					// This is not permitted.
-					// TODO: This is only for Stage 1. Check for free page.
+			int vir_pg = 0;						// Since this is thread's first page.
+			pg_no = find_free_page(tid, size);
 
-					printf("Memory for thread %d is full",
-							scheduler.running_thread->tid);
-					return NULL;
-				} else {
-					int curr_offset = 0;
-					pgm *itr_addr = memory + (itr * PAGE_SIZE);
-					while(curr_offset < PAGE_SIZE && !(itr_addr->free == 1 && (itr_addr->size > (sizeof(pgm) + size)))){
-						curr_offset += sizeof(pgm) + itr_addr->size;
-						itr_addr = (void *)itr_addr + sizeof(pgm) + itr_addr->size;
-					}
-
-					split_pg_block(itr_addr, size);
-
-					if(itr_addr->is_max_block == 1){
-						itr_addr->is_max_block = 0;
-
-						int curr_offset = 0;
-						pgm *temp_addr = memory + (itr * PAGE_SIZE);
-						invt_pg_table[itr].max_free = 0;
-						pgm *max_addr = NULL;
-
-						while(curr_offset < PAGE_SIZE){
-							if(temp_addr->free == 1 && temp_addr->size > invt_pg_table[itr].max_free){
-								invt_pg_table[itr].max_free = temp_addr->size;
-								max_addr = temp_addr;
-							}
-
-							curr_offset += sizeof(pgm) + temp_addr->size;
-							temp_addr  = (void *)temp_addr + sizeof(pgm) + temp_addr->size;
-						}
-
-						if(max_addr != NULL){
-							max_addr->is_max_block = 1;
-						}
-					}
-
-
-					ret_val = itr_addr + sizeof(pgm);
-//					invt_pg_table[itr].max_free += size;
-					alloc_complete = 1;
-				}
-			}
-		}
-
-		// The current thread doesnt own any page
-		if (alloc_complete == 0) {
-			if (free_index == -1) {
-				printf("Main memory out of memory (8MB)!!!!");
+			if(pg_no == -1){
+				// No Space left in Main Memory
+				printf("Main memory is full!!!\n");
 				return NULL;
-			} else {
-				inv_pg_entry *free_pg_entry = &(invt_pg_table[free_index]); //memory + (free_index * PAGE_SIZE);
-				free_pg_entry->tid = scheduler.running_thread->tid;
-				free_pg_entry->is_alloc = 1;
-				pgm *free_page = memory + (free_index * PAGE_SIZE);
-				split_pg_block(free_page, size);
-				free_pg_entry->max_free = free_pg_entry->max_free - sizeof(pgm) - size;
-				free_page->is_max_block = 0;
-				((pgm *)((void *)free_page + sizeof(pgm) + size))->is_max_block = 1;
-				ret_val = (void *)free_page + sizeof(pgm);
 			}
+
+			swap_pages(pg_no, vir_pg);
+
+			// Create a new Page Table Entry for the page
+
+			pte *new_pte = init_pte(vir_pg);
+			th_pg_tb[tid] = new_pte;
+
+			ret_val = allocate_in_page(tid, vir_pg, size);
+
+		}else{
+//			TODO: find if any page that the thread has, contains enough space for current 'size' allocation.
+			int vir_pg = 0;
+			pte *curr_pte = th_pg_tb[tid];
+
+			for(vir_pg = 0; curr_pte->next != NULL; vir_pg++){
+				if(invt_pg_table[curr_pte->mem_page_no].max_free >= size){
+					break;
+				}
+				vir_pg++;
+				curr_pte = curr_pte->next;
+			}
+
+			if(invt_pg_table[curr_pte->mem_page_no].max_free >= size){
+				// An existing page with free space more than 'size' is found.
+
+				int pg_no = curr_pte->mem_page_no;
+
+				// Find a block in page more than or equal to 'size'
+				int curr_offset = 0;
+				pgm *itr_addr = memory + (pg_no * PAGE_SIZE);
+				while(curr_offset < PAGE_SIZE && !(itr_addr->free == 1 && (itr_addr->size > (sizeof(pgm) + size)))){
+					curr_offset += sizeof(pgm) + itr_addr->size;
+					itr_addr = (void *)itr_addr + sizeof(pgm) + itr_addr->size;
+				}
+
+				split_pg_block(itr_addr, size);
+
+				// Update max_block in the page
+				if(itr_addr->is_max_block == 1){
+					itr_addr->is_max_block = 0;
+
+					int curr_offset = 0;
+					pgm *temp_addr = memory + (pg_no * PAGE_SIZE);
+					invt_pg_table[pg_no].max_free = 0;
+					pgm *max_addr = NULL;
+
+					while(curr_offset < PAGE_SIZE){
+						if(temp_addr->free == 1 && temp_addr->size > invt_pg_table[pg_no].max_free){
+							invt_pg_table[pg_no].max_free = temp_addr->size;
+							max_addr = temp_addr;
+						}
+
+						curr_offset += sizeof(pgm) + temp_addr->size;
+						temp_addr  = (void *)temp_addr + sizeof(pgm) + temp_addr->size;
+					}
+
+					if(max_addr != NULL){
+						max_addr->is_max_block = 1;
+					}
+				}
+
+				ret_val = itr_addr + sizeof(pgm);
+//				alloc_complete = 1;
+
+			}else if(vir_pg == TOTAL_PAGES - 1){
+				// The thread has used up all its virtual memory.
+				printf("The thread %d has used up all his virtual memory!!!", tid);
+				return NULL;
+			}else {
+				// The thread does not currently have a page large enough to hold the 'size' allocation.
+				// Allocating a new page.
+
+				pg_no = find_free_page(tid, size);
+				if(pg_no == NULL){
+					// No Space left in Main Memory
+					printf("Main memory is full!!!\n");
+					return NULL;
+				}
+
+				// Id for new virtual page
+				vir_pg++;
+
+				swap_pages(pg_no, vir_pg);
+
+				// Create a new Page Table Entry for the page
+
+				pte *new_pte = init_pte(vir_pg);
+				curr_pte->next = new_pte;
+
+
+				ret_val = allocate_in_page(tid, vir_pg, size);
+			}
+
 		}
+
 		return ret_val;
 	}
 }
@@ -200,6 +311,7 @@ void mydeallocate(void * ptr, char *filename, int line_number, int flag) {
 			invt_pg_table[inv_pg_index].max_free = pg_meta->size;
 		}
 
+//		TODO: If neighboring blocks are also free, then merge those blocks.
 	}
 	return;
 }
