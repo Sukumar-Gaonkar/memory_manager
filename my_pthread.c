@@ -468,6 +468,8 @@ int my_pthread_yield() {
 
 	SYS_MODE = 0;
 
+	switch_thread(prev_thread->tid, to_thread->tid);
+
 	if (swapcontext(&prev_thread->ucontext, &to_thread->ucontext) == -1) {
 		printf("Swapcontext Failed %d %s\n", errno, strerror(errno));
 		return -1;

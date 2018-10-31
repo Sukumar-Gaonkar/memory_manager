@@ -24,9 +24,9 @@ void * dummyFunction(tcb *thread) {
 	int i = 0, tot_mem = 0;
 	for (i = 0; i < 10; i++) {
 
-		tot_mem += 500;
+		tot_mem += 1000;
 		printf("Thread : %d  total: %d\n", curr_threadID, tot_mem);
-		printf("%p\n", malloc(500));
+		printf("%p\n", malloc(1000));
 	}
 	printf("Exited Thread: %i\n", curr_threadID);
 	return &(thread->tid);

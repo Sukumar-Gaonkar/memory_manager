@@ -24,11 +24,17 @@ int MAX_THREADS = 0;
 #undef malloc(x)
 #undef free(x)
 
+
 struct sigaction mem_access_sigact;
 
 static void mem_access_handler(int sig, siginfo_t *si, void *unused)
 {
    printf("Got SIGSEGV at address: 0x%lx\n",(long) si->si_addr);
+}
+
+void switch_thread(int old_tid, int new_tid){
+	// Protect all pages
+	mprotect(memory, PAGE_SIZE * TOTAL_PAGES,PROT_NONE);
 }
 
 void init_mem_manager() {
@@ -75,7 +81,7 @@ void init_mem_manager() {
 		mem_manager_init = 1;
 
 		// Protect all pages
-		mprotect(memory, sizeof(memory),PROT_NONE);
+		mprotect(memory, PAGE_SIZE * TOTAL_PAGES,PROT_NONE);
 
 		// Register Handler
 		mem_access_sigact.sa_flags = SA_SIGINFO;
@@ -171,7 +177,7 @@ void swap_pages(int pg1, int pg2){
 
 void * myallocate(size_t size, char *filename, int line_number, int flag) {
 
-	int alloc_complete = 0, i = 0, j = 0, pg_no = 0;
+	int alloc_complete = 0, i = 0, j = 0, old_pg = 0;
 	if (flag != THREADREQ) {
 		// TODO: dont call malloc, allocate space from kernel space of the memory
 		return malloc(size);
@@ -186,20 +192,30 @@ void * myallocate(size_t size, char *filename, int line_number, int flag) {
 			// The threads is asking for the page for the first time.
 
 			int vir_pg = 0;						// Since this is thread's first page.
-			pg_no = find_free_page(tid, size);
+			old_pg = find_free_page(tid, size);
 
-			if(pg_no == -1){
+			if(old_pg == -1){
 				// No Space left in Main Memory
 				printf("Main memory is full!!!\n");
 				return NULL;
 			}
 
-			swap_pages(pg_no, vir_pg);
+			void *page = memory + (old_pg * PAGE_SIZE);
+			mprotect(page, PAGE_SIZE, PROT_READ | PROT_WRITE);
+			page = memory + (vir_pg * PAGE_SIZE);
+			mprotect(page, PAGE_SIZE, PROT_READ | PROT_WRITE);
+
+			swap_pages(old_pg, vir_pg);
+
+			page = memory + (old_pg * PAGE_SIZE);
+			mprotect(page, PAGE_SIZE, PROT_READ | PROT_WRITE);
 
 			// Create a new Page Table Entry for the page
 
 			pte *new_pte = init_pte(vir_pg);
 			th_pg_tb[tid] = new_pte;
+
+			// Unprotect newly assignned page
 
 			ret_val = allocate_in_page(tid, vir_pg, size);
 
@@ -266,8 +282,8 @@ void * myallocate(size_t size, char *filename, int line_number, int flag) {
 				// The thread does not currently have a page large enough to hold the 'size' allocation.
 				// Allocating a new page.
 
-				pg_no = find_free_page(tid, size);
-				if(pg_no == NULL){
+				old_pg = find_free_page(tid, size);
+				if(old_pg == NULL){
 					// No Space left in Main Memory
 					printf("Main memory is full!!!\n");
 					return NULL;
@@ -276,14 +292,23 @@ void * myallocate(size_t size, char *filename, int line_number, int flag) {
 				// Id for new virtual page
 				vir_pg++;
 
-				swap_pages(pg_no, vir_pg);
+				void *page = memory + (old_pg * PAGE_SIZE);
+				mprotect(page, PAGE_SIZE, PROT_READ | PROT_WRITE);
+				page = memory + (vir_pg * PAGE_SIZE);
+				mprotect(page, PAGE_SIZE, PROT_READ | PROT_WRITE);
+
+				swap_pages(old_pg, vir_pg);
+
+				page = memory + (old_pg * PAGE_SIZE);
+				mprotect(page, PAGE_SIZE, PROT_READ | PROT_WRITE);
 
 				// Create a new Page Table Entry for the page
 
 				pte *new_pte = init_pte(vir_pg);
 				curr_pte->next = new_pte;
 
-
+				void *new_page = memory + (vir_pg * PAGE_SIZE);
+				mprotect(new_page, PAGE_SIZE, PROT_READ | PROT_WRITE);
 				ret_val = allocate_in_page(tid, vir_pg, size);
 			}
 
@@ -305,7 +330,7 @@ void mydeallocate(void * ptr, char *filename, int line_number, int flag) {
 
 		pgm *pg_meta = ptr - sizeof(pgm);
 		pg_meta->free = 1;
-		int inv_pg_index = (int)pg_meta / (int)PAGE_SIZE;
+		int inv_pg_index = (int)((void *)pg_meta - (void *)memory) / (int)PAGE_SIZE;
 
 		if(invt_pg_table[inv_pg_index].max_free < pg_meta->size){
 			invt_pg_table[inv_pg_index].max_free = pg_meta->size;

@@ -21,6 +21,8 @@
 #define SWAP_SIZE 1024*1024*16
 #define SWAP_NAME "swap_space.swp"
 
+void switch_thread(int old_tid, int new_tid);
+
 //make bitsets of page table entries
 typedef struct page_table_entry {
 	uint used :1;
