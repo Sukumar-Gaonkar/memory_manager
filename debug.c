@@ -8,8 +8,6 @@
 #include "my_pthread_t.h"
 #include "my_mem_manager.h"
 
-
-
 /*
 int main(int argc, char **argv) {
 	int *i = malloc(500 * sizeof(int));
@@ -24,9 +22,14 @@ void * dummyFunction(tcb *thread) {
 	int i = 0, tot_mem = 0;
 	for (i = 0; i < 10; i++) {
 
-		tot_mem += 1000;
+		tot_mem += 4000;
 		printf("Thread : %d  total: %d\n", curr_threadID, tot_mem);
-		printf("%p\n", malloc(1000));
+		int *ptr = malloc(4000);
+		*ptr = curr_threadID * 100 + i;
+		printf("Store : %d\n", *ptr);
+		pthread_yield();
+		printf("Thread : %d   Retrieve : %d\n", curr_threadID, *ptr);
+
 	}
 	printf("Exited Thread: %i\n", curr_threadID);
 	return &(thread->tid);
@@ -37,18 +40,16 @@ int main(int argc, char **argv) {
 	pthread_create(&t1, NULL, (void *) dummyFunction, &t1);
 	pthread_create(&t2, NULL, (void *) dummyFunction, &t2);
 
+	int curr_threadID = 1;
 	int i = 0, tot_mem = 0;
 	for (i = 0; i < 10; i++) {
-
-		if(i == 5){
-			pthread_join(t1, NULL);
-		}else if(i == 7){
-			pthread_join(t2, NULL);
-		}
-
-		tot_mem += 1000;
-		printf("Main: tot: %d\n", tot_mem);
-		printf("%p\n", malloc(1000));
+		tot_mem += 4000;
+		printf("Thread : %d  total: %d\n", curr_threadID, tot_mem);
+		int *ptr = malloc(4000);
+		*ptr = curr_threadID * 100 + i;
+		printf("Store : %d\n", *ptr);
+		pthread_yield();
+		printf("Thread : %d   Retrieve : %d\n", curr_threadID, *ptr);
 	}
 
 	printf("Done\n");

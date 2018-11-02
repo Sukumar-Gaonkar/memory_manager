@@ -29,12 +29,47 @@ struct sigaction mem_access_sigact;
 
 static void mem_access_handler(int sig, siginfo_t *si, void *unused)
 {
-   printf("Got SIGSEGV at address: 0x%lx\n",(long) si->si_addr);
+//   printf("Got SIGSEGV at address: 0x%lx\n",(long) si->si_addr);
+   int page_accessed = (int)(si->si_addr - (void *)memory) / PAGE_SIZE;
+   void *accessed_page_addr =  memory + (page_accessed * PAGE_SIZE);
+
+   if(scheduler.running_thread->tid == invt_pg_table[page_accessed].tid){
+	   // IF running thread owns the page accessed, then unprotect the page.
+	   mprotect(accessed_page_addr, PAGE_SIZE, PROT_READ | PROT_WRITE);
+   }else{
+
+	   // Is the required present in Main Memory
+	   int i, actual_page;
+	   pte *curr_pte = th_pg_tb[scheduler.running_thread->tid];
+	   for(i=0;i < page_accessed ; i++){
+		   curr_pte = curr_pte->next;
+	   }
+
+	   if(curr_pte->in_memory == 1){
+		   actual_page = curr_pte->mem_page_no;
+		   void *actual_page_addr = memory + (actual_page * PAGE_SIZE);
+
+		   //Unprotect the pages to be swapped
+		   mprotect(accessed_page_addr, PAGE_SIZE, PROT_READ | PROT_WRITE);
+		   mprotect(actual_page_addr, PAGE_SIZE, PROT_READ | PROT_WRITE);
+
+		   swap_pages(actual_page, page_accessed);
+
+		   // Re-Protect the swapped out page
+		   mprotect(actual_page_addr, PAGE_SIZE, PROT_NONE);
+
+	   }else{
+		   // Page in Swap file
+	   }
+
+
+   }
 }
 
 void switch_thread(int old_tid, int new_tid){
 	// Protect all pages
 	mprotect(memory, PAGE_SIZE * TOTAL_PAGES,PROT_NONE);
+
 }
 
 void init_mem_manager() {
@@ -157,6 +192,42 @@ void swap_pages(int pg1, int pg2){
 	if(pg1 == pg2)
 		return;
 
+
+	// Update Thread Page Table Entries
+	int i;
+	pte *curr_pte;
+	// Update mem_page_no of pg1 to pg2 inside Thread Page Table
+	if(invt_pg_table[pg1].is_alloc == 1){
+		int pg1_tid = invt_pg_table[pg1].tid;
+
+		curr_pte = th_pg_tb[pg1_tid];
+		while(curr_pte != NULL && curr_pte->mem_page_no != pg1){
+			curr_pte = curr_pte->next;
+		}
+
+		if(curr_pte == NULL){
+			printf("Page not found in th_pg_tb!!!\n");
+			return;
+		}
+
+		curr_pte->mem_page_no = pg2;
+	}
+	// Update mem_page_no of pg2 to pg1 inside Thread Page Table
+	if(invt_pg_table[pg2].is_alloc == 1){
+		int pg2_tid = invt_pg_table[pg2].tid;
+		curr_pte = th_pg_tb[pg2_tid];
+		while(curr_pte != NULL && curr_pte->mem_page_no != pg2){
+			curr_pte = curr_pte->next;
+		}
+
+		if(curr_pte == NULL){
+			printf("Page not found in th_pg_tb!!!\n");
+			return;
+		}
+
+		curr_pte->mem_page_no = pg1;
+	}
+
 	// Update Inverted Page Table
 	inv_pte *p1 = &(invt_pg_table[pg1]);
 	inv_pte *p2 = &(invt_pg_table[pg2]);
@@ -228,7 +299,7 @@ void * myallocate(size_t size, char *filename, int line_number, int flag) {
 				if(invt_pg_table[curr_pte->mem_page_no].max_free >= size){
 					break;
 				}
-				vir_pg++;
+//				vir_pg++;
 				curr_pte = curr_pte->next;
 			}
 
