@@ -210,8 +210,6 @@ void *init_pte(int pg_no) {
 
 	// Create a new Page Table Entry for the page
 	pte *new_pte = (pte *) malloc(sizeof(pte));
-
-	new_pte->used = 1;
 	new_pte->in_memory = 1;
 	new_pte->dirty = 0;
 	new_pte->mem_page_no = pg_no;
@@ -405,7 +403,7 @@ void * myallocate(size_t size, char *filename, int line_number, int flag) {
 				}
 
 				if (write_in_swap(thread_pt[tid]->mem_page_no, swap_index)
-						!= -1) {
+						== -1) {
 					printf("Cant write in Swap File!!!\n");
 					return NULL;
 				}
@@ -508,7 +506,7 @@ void * myallocate(size_t size, char *filename, int line_number, int flag) {
 				// Allocating a new page.
 
 				old_pg = find_free_page(tid, size);
-				if (old_pg == NULL) {
+				if (old_pg == -1) {
 					// No Space left in Main Memory
 					printf("Main memory is full!!!\n");
 					// TODO: Swap Code
