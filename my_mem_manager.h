@@ -17,15 +17,19 @@
 #define malloc(x) myallocate(x, __FILE__, __LINE__, THREADREQ)
 #define free(x) mydeallocate(x, __FILE__, __LINE__, THREADREQ)
 
-#define MAIN_MEM_SIZE 1024*1024//*8
-#define SWAP_SIZE 1024*1024*16
+#define MAIN_MEM_SIZE 5*1024*1024 //*8
+#define SWAP_SIZE 1024*1024*1 //16
 #define SWAP_NAME "swap_space.swp"
+
+typedef enum REGION_TYPE{
+	KERNEL_REGION,
+	SHARED_REGION
+} reg_type;
 
 void switch_thread(int old_tid, int new_tid);
 
 //make bitsets of page table entries
 typedef struct page_table_entry {
-	uint used :1;
 	uint in_memory :1;		//if not then check in swap
 	uint dirty: 1;			// is it necessary to write this
 	uint mem_page_no :12;
@@ -52,14 +56,8 @@ typedef struct inverted_pagetable_entry {
 
 typedef struct pg_metadata {
 	uint free :1;
-	uint is_max_block: 1;
+	uint is_max_free_block: 1;
 	uint size :12;
 }pgm;
-
-typedef struct swap_data {
-	uint valid;
-	uint tid :12;
-	inv_pte *pg_entry;
-} swap;
 
 #endif /* MY_MEM_MANAGER_H_ */

@@ -20,7 +20,7 @@ void * dummyFunction(tcb *thread) {
 	printf("Entered Thread %i\n", curr_threadID);
 
 	int i = 0, tot_mem = 0;
-	for (i = 0; i < 10; i++) {
+	for (i = 0; i < 5; i++) {
 
 		tot_mem += 4000;
 		printf("Thread : %d  total: %d\n", curr_threadID, tot_mem);
@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
 
 	int curr_threadID = 1;
 	int i = 0, tot_mem = 0;
-	for (i = 0; i < 10; i++) {
+	for (i = 0; i < 5; i++) {
 		tot_mem += 4000;
 		printf("Thread : %d  total: %d\n", curr_threadID, tot_mem);
 		int *ptr = malloc(4000);
