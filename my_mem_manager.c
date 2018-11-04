@@ -23,7 +23,7 @@ int TOTAL_PAGES = 0;
 int SHARED_PAGES = 0;
 int KERNEL_PAGES = 0;
 int SWAP_PAGES = 0;
-int MAX_THREADS = 0;
+//int MAX_THREADS = 0;
 
 #undef malloc(x)
 #undef free(x)
@@ -152,7 +152,7 @@ void init_mem_manager() {
 		SHARED_PAGES = available_pages * SHARED_SPACE;
 		KERNEL_PAGES = available_pages * KERNEL_SPACE;
 		SWAP_PAGES = (SWAP_SIZE / PAGE_SIZE);
-		MAX_THREADS = 256;
+		//MAX_THREADS = 256;
 		TOTAL_PAGES = 2;
 		//	Initialize Inverted Page Table and mem-align the pages
 		invt_pg_table = (inv_pte*) malloc(available_pages * sizeof(inv_pte));
@@ -180,7 +180,7 @@ void init_mem_manager() {
 		}
 
 		//Init Thread Page Table
-		thread_pt = (pte **) malloc(MAX_THREADS * sizeof(pte *));
+		thread_pt = (pte **) malloc(sizeof(pte *));
 		for (i = 0; i < MAX_THREADS; i++) {
 			thread_pt[i] = NULL;
 		}

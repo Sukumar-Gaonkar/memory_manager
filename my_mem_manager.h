@@ -20,7 +20,7 @@
 #define MAIN_MEM_SIZE 5*1024*1024 //*8
 #define SWAP_SIZE 1024*1024*1 //16
 #define SWAP_NAME "swap_space.swp"
-//#define MAX_THREADS 2048
+#define MAX_THREADS 256// 2048
 
 typedef enum REGION_TYPE {
 	KERNEL_REGION, SHARED_REGION
@@ -46,6 +46,7 @@ typedef struct page_table_entry {
  *  avoid storing a pointer(32 bits) to the next virtual page entry.
  */
 pte **thread_pt;
+//pte **thread_pt;
 
 typedef struct inverted_pagetable_entry {
 	uint tid :12;		// Allowing maximum 2048 threads
