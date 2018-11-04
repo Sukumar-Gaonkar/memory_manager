@@ -30,14 +30,76 @@ int MAX_THREADS = 0;
 
 struct sigaction mem_access_sigact;
 
-void setBit(int A[], int k) {
+void setBit(int *A, int k) {
 	A[k / 32] |= 1 << (k % 32);  // Set the bit at the k-th position in A[i]
 }
-int testBit(int A[], int k) {
+
+int testBit(int *A, int k) {
 	return ((A[k / 32] & (1 << (k % 32))) != 0);
 }
-void clearBit(int A[], int k) {
+
+void clearBit(int *A, int k) {
 	A[k / 32] &= ~(1 << (k % 32));
+}
+
+void swap_pages(int pg1, int pg2) {
+
+	// Verify if valid swap
+	if (pg1 == pg2)
+		return;
+
+	// Update Thread Page Table Entries
+	int i;
+	pte *curr_pte;
+	// Update mem_page_no of pg1 to pg2 inside Thread Page Table
+	if (invt_pg_table[pg1].is_alloc == 1) {
+		int pg1_tid = invt_pg_table[pg1].tid;
+
+		curr_pte = thread_pt[pg1_tid];
+		while (curr_pte != NULL && curr_pte->mem_page_no != pg1) {
+			curr_pte = curr_pte->next;
+		}
+
+		if (curr_pte == NULL) {
+			printf("Page not found in th_pg_tb!!!\n");
+			return;
+		}
+
+		curr_pte->mem_page_no = pg2;
+	}
+	// Update mem_page_no of pg2 to pg1 inside Thread Page Table
+	if (invt_pg_table[pg2].is_alloc == 1) {
+		int pg2_tid = invt_pg_table[pg2].tid;
+		curr_pte = thread_pt[pg2_tid];
+		while (curr_pte != NULL && curr_pte->mem_page_no != pg2) {
+			curr_pte = curr_pte->next;
+		}
+
+		if (curr_pte == NULL) {
+			printf("Page not found in th_pg_tb!!!\n");
+			return;
+		}
+
+		curr_pte->mem_page_no = pg1;
+	}
+
+	// Update Inverted Page Table
+	inv_pte *p1 = &(invt_pg_table[pg1]);
+	inv_pte *p2 = &(invt_pg_table[pg2]);
+	void *holder = (void*) malloc(sizeof(inv_pte));
+
+	memcpy(holder, p1, sizeof(inv_pte));
+	memcpy(p1, p2, sizeof(inv_pte));
+	memcpy(p2, holder, sizeof(inv_pte));
+
+	void *mem_pg1 = memory + (pg1 * PAGE_SIZE);
+	void *mem_pg2 = memory + (pg2 * PAGE_SIZE);
+
+	// Perform actual swap in Main memory
+	void *temp = malloc(PAGE_SIZE);
+	memcpy(temp, mem_pg1, PAGE_SIZE);
+	memcpy(mem_pg1, mem_pg2, PAGE_SIZE);
+	memcpy(mem_pg2, temp, PAGE_SIZE);
 }
 
 void mem_access_handler(int sig, siginfo_t *si, void *unused) {
@@ -93,7 +155,7 @@ void init_mem_manager() {
 		MAX_THREADS = 256;
 		TOTAL_PAGES = 2;
 		//	Initialize Inverted Page Table and mem-align the pages
-		invt_pg_table = malloc(available_pages * sizeof(inv_pte));
+		invt_pg_table = (inv_pte*) malloc(available_pages * sizeof(inv_pte));
 		memory = (char*) malloc(sizeof(MAIN_MEM_SIZE));
 
 		memory = (char*) memalign(PAGE_SIZE, MAIN_MEM_SIZE);
@@ -198,7 +260,7 @@ void *allocate_in_page(int tid, int pg_no, int size) {
 	free_pg_entry->is_alloc = 1;
 	free_pg_entry->max_free = free_pg_entry->max_free - sizeof(pgm) - size;
 
-	pgm *free_page = memory + (pg_no * PAGE_SIZE);
+	pgm *free_page = (pgm*) (memory + (pg_no * PAGE_SIZE));
 	split_pg_block(free_page, size);
 	free_page->is_max_free_block = 0;
 	((pgm *) ((void *) free_page + sizeof(pgm) + size))->is_max_free_block = 1;
@@ -215,65 +277,8 @@ void *init_pte(int pg_no) {
 	new_pte->mem_page_no = pg_no;
 	new_pte->swap_page_no = 0;
 	new_pte->next = NULL;
-}
 
-void swap_pages(int pg1, int pg2) {
-
-	// Verify if valid swap
-	if (pg1 == pg2)
-		return;
-
-	// Update Thread Page Table Entries
-	int i;
-	pte *curr_pte;
-	// Update mem_page_no of pg1 to pg2 inside Thread Page Table
-	if (invt_pg_table[pg1].is_alloc == 1) {
-		int pg1_tid = invt_pg_table[pg1].tid;
-
-		curr_pte = thread_pt[pg1_tid];
-		while (curr_pte != NULL && curr_pte->mem_page_no != pg1) {
-			curr_pte = curr_pte->next;
-		}
-
-		if (curr_pte == NULL) {
-			printf("Page not found in th_pg_tb!!!\n");
-			return;
-		}
-
-		curr_pte->mem_page_no = pg2;
-	}
-	// Update mem_page_no of pg2 to pg1 inside Thread Page Table
-	if (invt_pg_table[pg2].is_alloc == 1) {
-		int pg2_tid = invt_pg_table[pg2].tid;
-		curr_pte = thread_pt[pg2_tid];
-		while (curr_pte != NULL && curr_pte->mem_page_no != pg2) {
-			curr_pte = curr_pte->next;
-		}
-
-		if (curr_pte == NULL) {
-			printf("Page not found in th_pg_tb!!!\n");
-			return;
-		}
-
-		curr_pte->mem_page_no = pg1;
-	}
-
-	// Update Inverted Page Table
-	inv_pte *p1 = &(invt_pg_table[pg1]);
-	inv_pte *p2 = &(invt_pg_table[pg2]);
-	void *holder = malloc(sizeof(inv_pte));
-	memcpy(holder, p1, sizeof(inv_pte));
-	memcpy(p1, p2, sizeof(inv_pte));
-	memcpy(p2, holder, sizeof(inv_pte));
-
-	void *mem_pg1 = memory + (pg1 * PAGE_SIZE);
-	void *mem_pg2 = memory + (pg2 * PAGE_SIZE);
-
-	// Perform actual swap in Main memory
-	void *temp = malloc(PAGE_SIZE);
-	memcpy(temp, mem_pg1, PAGE_SIZE);
-	memcpy(mem_pg1, mem_pg2, PAGE_SIZE);
-	memcpy(mem_pg2, temp, PAGE_SIZE);
+	return new_pte;
 }
 
 void * special_alloc(size_t size, int type) {
@@ -309,7 +314,7 @@ void * special_alloc(size_t size, int type) {
 
 		// Find a block in page more than or equal to 'size'
 		int curr_offset = 0;
-		pgm *itr_addr = memory + (shared_pg_index * PAGE_SIZE);
+		pgm *itr_addr = (pgm*) (memory + (shared_pg_index * PAGE_SIZE));
 		while (curr_offset < PAGE_SIZE
 				&& !(itr_addr->free == 1
 						&& (itr_addr->size > (sizeof(pgm) + size)))) {
@@ -324,7 +329,7 @@ void * special_alloc(size_t size, int type) {
 			itr_addr->is_max_free_block = 0;
 
 			int curr_offset = 0;
-			pgm *temp_addr = memory + (shared_pg_index * PAGE_SIZE);
+			pgm *temp_addr = (pgm*) (memory + (shared_pg_index * PAGE_SIZE));
 			invt_pg_table[shared_pg_index].max_free = 0;
 			pgm *max_addr = NULL;
 
@@ -457,7 +462,7 @@ void * myallocate(size_t size, char *filename, int line_number, int flag) {
 
 				// Find a block in page more than or equal to 'size'
 				int curr_offset = 0;
-				pgm *itr_addr = memory + (pg_no * PAGE_SIZE);
+				pgm *itr_addr = (pgm*) (memory + (pg_no * PAGE_SIZE));
 				while (curr_offset < PAGE_SIZE
 						&& !(itr_addr->free == 1
 								&& (itr_addr->size > (sizeof(pgm) + size)))) {
@@ -472,7 +477,7 @@ void * myallocate(size_t size, char *filename, int line_number, int flag) {
 					itr_addr->is_max_free_block = 0;
 
 					int curr_offset = 0;
-					pgm *temp_addr = memory + (pg_no * PAGE_SIZE);
+					pgm *temp_addr = (pgm*) (memory + (pg_no * PAGE_SIZE));
 					invt_pg_table[pg_no].max_free = 0;
 					pgm *max_addr = NULL;
 
@@ -556,12 +561,14 @@ void mydeallocate(void * ptr, char *filename, int line_number, int flag) {
 		pgm *pg_meta = ptr - sizeof(pgm);
 		pgm *curr_pgm;
 		pg_meta->free = 1;
+
 		int inv_pg_index = (int) ((void *) pg_meta - (void *) memory)
 				/ (int) PAGE_SIZE;
 
 		if (invt_pg_table[inv_pg_index].max_free < pg_meta->size) {
 			invt_pg_table[inv_pg_index].max_free = pg_meta->size;
 			pg_meta->is_max_free_block = 1;
+			//point of this????
 			while (curr_pgm != NULL) {
 				if (curr_pgm->is_max_free_block == 1) {
 					curr_pgm->is_max_free_block = 0;
