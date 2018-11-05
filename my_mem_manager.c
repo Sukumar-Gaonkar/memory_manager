@@ -24,7 +24,6 @@ int TOTAL_PAGES = 0;
 int SHARED_PAGES = 0;
 int KERNEL_PAGES = 0;
 int SWAP_PAGES = 0;
-//int MAX_THREADS = 0;
 
 #undef malloc(x)
 #undef free(x)
@@ -69,7 +68,7 @@ void swap_pages(int pg1, int pg2) {
 		curr_pte->mem_page_no = pg2;
 	}
 	// Update mem_page_no of pg2 to pg1 inside Thread Page Table
-	if (invt_pg_table[pg2].is_alloc == 1) {
+	if (invt_pg_table[pg2].is_alloc == 1 && pg2 != available_pages - 1) {
 		int pg2_tid = invt_pg_table[pg2].tid;
 		curr_pte = thread_pt[pg2_tid];
 		while (curr_pte != NULL && curr_pte->mem_page_no != pg2) {
@@ -96,14 +95,18 @@ void swap_pages(int pg1, int pg2) {
 	void *mem_pg1 = memory + (pg1 * PAGE_SIZE);
 	void *mem_pg2 = memory + (pg2 * PAGE_SIZE);
 
+	//unprotect old page to swap out
+	mprotect(mem_pg1, PAGE_SIZE, PROT_READ | PROT_WRITE);
+
 	// Perform actual swap in Main memory
 	void *temp = malloc(PAGE_SIZE);
 	memcpy(temp, mem_pg1, PAGE_SIZE);
 	memcpy(mem_pg1, mem_pg2, PAGE_SIZE);
 	memcpy(mem_pg2, temp, PAGE_SIZE);
+	free(temp);
 }
 
-int read_from_swap(int mem_index, int swap_index){
+int read_from_swap(int mem_index, int swap_index) {
 
 	int swap_offset = swap_index * PAGE_SIZE;
 	void *mem_addr = memory + mem_index * PAGE_SIZE;
@@ -113,21 +116,26 @@ int read_from_swap(int mem_index, int swap_index){
 	x = read(fileno(swap_file), mem_addr, PAGE_SIZE);
 	close(fileno(swap_file));
 
-	if(x < 1){
+	if (x < 1) {
 		printf("Read form swap file failed!!!\n");
 		return -1;
 	}
 
 	invt_pg_table[mem_index].is_alloc = 1;
 	invt_pg_table[mem_index].tid = scheduler.running_thread->tid;
-	invt_pg_table[mem_index].max_free = -1;
+	invt_pg_table[mem_index].max_free = 0;
+
+	clearBit(invt_swap_tb, swap_index);
+
 	pgm *curr_pgm = memory + mem_index * PAGE_SIZE;
-	while(curr_pgm != NULL){
-		if(curr_pgm->is_max_free_block == 1){
+	while (curr_pgm != NULL) {
+		if (curr_pgm->is_max_free_block == 1) {
 			invt_pg_table[mem_index].max_free = curr_pgm->size;
 			break;
 		}
+		curr_pgm = (void *) curr_pgm + sizeof(pgm) + curr_pgm->size;
 	}
+
 }
 
 void mem_access_handler(int sig, siginfo_t *si, void *unused) {
@@ -140,12 +148,14 @@ void mem_access_handler(int sig, siginfo_t *si, void *unused) {
 
 		pte *curr_pte = thread_pt[scheduler.running_thread->tid];
 		int pg_count = 0;
-		while(curr_pte != NULL && !(curr_pte->in_memory == 1 && curr_pte->mem_page_no == page_accessed)){
+		while (curr_pte != NULL
+				&& !(curr_pte->in_memory == 1
+						&& curr_pte->mem_page_no == page_accessed)) {
 			curr_pte = curr_pte->next;
 			pg_count++;
 		}
 
-		if(page_accessed == pg_count){
+		if (page_accessed == pg_count) {
 			// If the main memory has the correct page, then unprotect the page
 			mprotect(accessed_page_addr, PAGE_SIZE, PROT_READ | PROT_WRITE);
 			return;
@@ -154,13 +164,13 @@ void mem_access_handler(int sig, siginfo_t *si, void *unused) {
 
 	// The main memory access does not have the correct page.
 	// Is the required present in Main Memory
-	int actual_page;
+	int actual_page = 0;
 	pte *reqd_pte = thread_pt[scheduler.running_thread->tid];
-	for (i = 0; reqd_pte != NULL && i < page_accessed; i++) {
+	for (i = 0; i < page_accessed && reqd_pte != NULL; i++) {
 		reqd_pte = reqd_pte->next;
 	}
 
-	if(reqd_pte == NULL){
+	if (reqd_pte == NULL) {
 		printf("Page access out of bounds!!!\n");
 		return;
 	}
@@ -185,7 +195,7 @@ void mem_access_handler(int sig, siginfo_t *si, void *unused) {
 
 		int is_buffered = 0;
 		int free_pg_index = find_free_page();
-		if(free_pg_index == -1){
+		if (free_pg_index == -1) {
 			// swap from swap file
 			free_pg_index = available_pages - 1;
 			is_buffered = 1;
@@ -209,24 +219,26 @@ void mem_access_handler(int sig, siginfo_t *si, void *unused) {
 
 		reqd_pte->in_memory = 1;
 		reqd_pte->mem_page_no = page_accessed;
-		reqd_pte->swap_page_no = -1;
+		reqd_pte->swap_page_no = 0;
 
-		if(is_buffered){
+		if (is_buffered) {
 			// Write Buffer to Swap File
 
 			write_in_swap(free_pg_index, swap_file_index);
 			pte *curr_pte = thread_pt[old_tid];
-			while(curr_pte != NULL && !(curr_pte->in_memory == 1 && curr_pte->mem_page_no == available_pages - 1)){
+			while (curr_pte != NULL
+					&& !(curr_pte->in_memory == 1
+							&& curr_pte->mem_page_no == available_pages - 1)) {
 				curr_pte = curr_pte->next;
 			}
 
-			if(curr_pte == NULL){
+			if (curr_pte == NULL) {
 				printf("Page not found\n");
 			}
 
 			curr_pte->in_memory = 0;
 			curr_pte->swap_page_no = swap_file_index;
-			curr_pte->mem_page_no = -1;
+			curr_pte->mem_page_no = 0;
 		}
 	}
 }
@@ -244,13 +256,11 @@ void init_mem_manager() {
 		TOTAL_PAGES = available_pages * PAGE_SPACE;
 		SHARED_PAGES = available_pages * SHARED_SPACE;
 		KERNEL_PAGES = available_pages * KERNEL_SPACE;
-		KERNEL_PAGES--; 								// The last page in Main memory will be reserved for Buffer Space.
+		KERNEL_PAGES--; // The last page in Main memory will be reserved for Buffer Space.
 		SWAP_PAGES = (SWAP_SIZE / PAGE_SIZE);
-		//MAX_THREADS = 256;
-		TOTAL_PAGES = 2;
+
 		//	Initialize Inverted Page Table and mem-align the pages
 		invt_pg_table = (inv_pte*) malloc(available_pages * sizeof(inv_pte));
-//		memory = (char*) malloc(sizeof(MAIN_MEM_SIZE));
 
 		memory = (char*) memalign(PAGE_SIZE, MAIN_MEM_SIZE);
 
@@ -305,7 +315,7 @@ void split_pg_block(pgm *itr_addr, int size) {
 
 	pgm *new_ptr = (void *) itr_addr + sizeof(pgm) + size;
 	new_ptr->free = 1;
-	new_ptr->size = (void *) itr_addr->size - size - sizeof(pgm);
+	new_ptr->size = itr_addr->size - size - sizeof(pgm);
 
 	itr_addr->free = 0;
 	itr_addr->size = size;
@@ -318,7 +328,7 @@ int write_in_swap(int mem_index, int swap_index) {
 	// Unprotect page to be swapped out
 	mprotect(mem_page, PAGE_SIZE, PROT_READ | PROT_WRITE);
 
-	setBit(invt_pg_table, swap_index);
+	setBit(invt_swap_tb, swap_index);
 
 	swap_file = fopen(SWAP_NAME, "r+");
 	int x = lseek(fileno(swap_file), swap_offset, SEEK_SET);
@@ -519,6 +529,11 @@ void * myallocate(size_t size, char *filename, int line_number, int flag) {
 				thread_pt[tid]->mem_page_no = 0;
 				thread_pt[tid]->next = NULL;
 
+				pgm * curr_pgm = memory;
+				curr_pgm->free = 0;
+				curr_pgm->is_max_free_block = 1;
+				curr_pgm->size = PAGE_SIZE - sizeof(pgm);
+
 				return allocate_in_page(tid, 0, size);
 
 			}
@@ -563,6 +578,9 @@ void * myallocate(size_t size, char *filename, int line_number, int flag) {
 					itr_addr = (void *) itr_addr + sizeof(pgm) + itr_addr->size;
 				}
 
+				// Unprotect
+				mprotect(itr_addr, PAGE_SIZE, PROT_READ | PROT_WRITE);
+
 				split_pg_block(itr_addr, size);
 
 				// Update max_block in the page
@@ -596,13 +614,12 @@ void * myallocate(size_t size, char *filename, int line_number, int flag) {
 
 			} else if (vir_pg == TOTAL_PAGES - 1) {
 				// The thread has used up all its virtual memory.
-				printf("The thread %d has used up all his virtual memory!!!",
+				printf("The thread %d has used up all his virtual memory!!!\n",
 						tid);
 				return NULL;
 			} else {
 				// The thread does not currently have a page large enough to hold the 'size' allocation.
 				// Allocating a new page.
-
 
 				// Id for new virtual page
 				vir_pg++;
@@ -610,6 +627,11 @@ void * myallocate(size_t size, char *filename, int line_number, int flag) {
 				// Create a new Page Table Entry for the page
 				pte *new_pte = init_pte(vir_pg);
 				vir_pte->next = new_pte;
+
+				void *page = memory + (old_pg * PAGE_SIZE);
+				mprotect(page, PAGE_SIZE, PROT_READ | PROT_WRITE);
+				void *newpage = memory + (vir_pg * PAGE_SIZE);
+				mprotect(newpage, PAGE_SIZE, PROT_READ | PROT_WRITE);
 
 				old_pg = find_free_page(tid, size);
 				if (old_pg == -1) {
@@ -630,14 +652,15 @@ void * myallocate(size_t size, char *filename, int line_number, int flag) {
 
 					int old_tid = invt_pg_table[vir_pg].tid;
 					pte *curr_pte = thread_pt[old_tid];
-					while(curr_pte != NULL && !(curr_pte->in_memory == 1 && curr_pte->mem_page_no == vir_pg))
+					while (curr_pte != NULL
+							&& !(curr_pte->in_memory == 1
+									&& curr_pte->mem_page_no == vir_pg))
 						curr_pte = curr_pte->next;
 
 					curr_pte->in_memory = 0;
 					curr_pte->swap_page_no = swap_index;
 
-					if (write_in_swap(vir_pg, swap_index)
-							== -1) {
+					if (write_in_swap(vir_pg, swap_index) == -1) {
 						printf("Cant write in Swap File!!!\n");
 						return NULL;
 					}
@@ -647,22 +670,23 @@ void * myallocate(size_t size, char *filename, int line_number, int flag) {
 					invt_pg_table[vir_pg].max_free = PAGE_SIZE - sizeof(pgm);
 
 					new_pte->in_memory = 1;
-					new_pte->mem_page_no = 0;
+					new_pte->mem_page_no = vir_pg;
 					new_pte->next = NULL;
+
+					pgm * curr_pgm = memory + vir_pg * PAGE_SIZE;
+					curr_pgm->free = 0;
+					curr_pgm->is_max_free_block = 1;
+					curr_pgm->size = PAGE_SIZE - sizeof(pgm);
 
 					return allocate_in_page(tid, vir_pg, size);
 
 				}
 
-				void *page = memory + (old_pg * PAGE_SIZE);
-				mprotect(page, PAGE_SIZE, PROT_READ | PROT_WRITE);
-				page = memory + (vir_pg * PAGE_SIZE);
-				mprotect(page, PAGE_SIZE, PROT_READ | PROT_WRITE);
-
 				swap_pages(old_pg, vir_pg);
 
+				//reprotect old page
 				page = memory + (old_pg * PAGE_SIZE);
-				mprotect(page, PAGE_SIZE, PROT_READ | PROT_WRITE);
+				mprotect(page, PAGE_SIZE, PROT_NONE);
 
 				void *new_page = memory + (vir_pg * PAGE_SIZE);
 				mprotect(new_page, PAGE_SIZE, PROT_READ | PROT_WRITE);
@@ -710,6 +734,6 @@ void mydeallocate(void * ptr, char *filename, int line_number, int flag) {
 	return;
 }
 
-void* shalloc(size_t size) {
-	special_alloc(size, SHARED_REGION);
-}
+//void* shalloc(size_t size) {
+//	special_alloc(size, SHARED_REGION);
+//}
