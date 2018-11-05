@@ -17,10 +17,9 @@
 #define malloc(x) myallocate(x, __FILE__, __LINE__, THREADREQ)
 #define free(x) mydeallocate(x, __FILE__, __LINE__, THREADREQ)
 
-#define MAIN_MEM_SIZE 5*1024*1024 //*8
-#define SWAP_SIZE 1024*1024*1 //16
+#define MAIN_MEM_SIZE 8*1024*1024 
+#define SWAP_SIZE 1024*1024*16
 #define SWAP_NAME "swap_space.swp"
-#define MAX_THREADS 256// 2048
 
 typedef enum REGION_TYPE {
 	KERNEL_REGION, SHARED_REGION

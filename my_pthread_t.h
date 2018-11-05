@@ -31,11 +31,11 @@
 #endif
 
 #define MEM 4000
-
-#define LEVELS 100
+#define MAX_THREADS 1024
+#define LEVELS 25
 #define TIME_QUANTUM 50
 #define RUNNING_TIME 500
-#define MAX_PRIORITY 15
+
 // Important threads will not be demoted below this level.
 //Threads on which other threads are waiting and/or threads holding mutexes are important threads.
 

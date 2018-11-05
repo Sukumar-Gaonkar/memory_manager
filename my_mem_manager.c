@@ -2,7 +2,8 @@
  * my_mem_manager.c
  *
  *  Created on: Oct 25, 2018
- *      Author: sg1425
+ *  Author: sg1425,ark159,vp406
+ *  Machine: man.cs.rutgers.edu
  */
 #include <sys/mman.h>
 #include "my_pthread_t.h"
@@ -61,7 +62,7 @@ void swap_pages(int pg1, int pg2) {
 		}
 
 		if (curr_pte == NULL) {
-			printf("Page not found in th_pg_tb!!!\n");
+			printf("Page not found in thread page table!!!\n");
 			return;
 		}
 
@@ -76,7 +77,7 @@ void swap_pages(int pg1, int pg2) {
 		}
 
 		if (curr_pte == NULL) {
-			printf("Page not found in th_pg_tb!!!\n");
+			printf("Page not found in thread page table!!!\n");
 			return;
 		}
 
@@ -115,8 +116,6 @@ void * special_alloc(size_t size, int type) {
 	init_mem_manager();
 
 	void *ret_val;
-
-//	TODO: find if any page that the thread has, contains enough space for current 'size' allocation.
 
 	// get address of first shared page.
 //	pte *curr_shared_pg = (void *) memory + TOTAL_PAGES * PAGE_SIZE;
@@ -446,7 +445,7 @@ int find_free_page() {
 void *allocate_in_page(int tid, int pg_no, int size) {
 
 	// Update Inverted Page Table
-	inv_pte *free_pg_entry = &(invt_pg_table[pg_no]); //memory + (free_index * PAGE_SIZE);
+	inv_pte *free_pg_entry = &(invt_pg_table[pg_no]); 
 	free_pg_entry->tid = tid;
 	free_pg_entry->is_alloc = 1;
 	free_pg_entry->max_free = free_pg_entry->max_free - sizeof(pgm) - size;
@@ -476,7 +475,6 @@ void * myallocate(size_t size, char *filename, int line_number, int flag) {
 
 	int alloc_complete = 0, i = 0, j = 0, old_pg = 0;
 	if (flag != THREADREQ) {
-		// TODO: dont call malloc, allocate space from kernel space of the memory
 		return special_alloc(size, KERNEL_REGION);
 //		return malloc(size);
 	} else {
@@ -553,7 +551,7 @@ void * myallocate(size_t size, char *filename, int line_number, int flag) {
 			ret_val = allocate_in_page(tid, vir_pg, size);
 
 		} else {
-//			TODO: find if any page that the thread has, contains enough space for current 'size' allocation.
+
 			int vir_pg = 0;
 			pte *vir_pte = thread_pt[tid];
 
@@ -705,37 +703,31 @@ void * myallocate(size_t size, char *filename, int line_number, int flag) {
 void mydeallocate(void * ptr, char *filename, int line_number, int flag) {
 
 	int alloc_complete = 0;
-//	if (flag != THREADREQ) {
-//		free(ptr);
-//
-//	} else {
-		make_scheduler();
+	make_scheduler();
 
-		pgm *pg_meta = ptr - sizeof(pgm);
-		pgm *curr_pgm;
-		pg_meta->free = 1;
+	pgm *pg_meta = ptr - sizeof(pgm);
+	pgm *curr_pgm;
+	pg_meta->free = 1;
 
-		int inv_pg_index = (int) ((void *) pg_meta - (void *) memory)
-				/ (int) PAGE_SIZE;
+	int inv_pg_index = (int) ((void *) pg_meta - (void *) memory)
+			/ (int) PAGE_SIZE;
 
-		if (invt_pg_table[inv_pg_index].max_free < pg_meta->size) {
-			invt_pg_table[inv_pg_index].max_free = pg_meta->size;
-			pg_meta->is_max_free_block = 1;
+	if (invt_pg_table[inv_pg_index].max_free < pg_meta->size) {
+		invt_pg_table[inv_pg_index].max_free = pg_meta->size;
+		pg_meta->is_max_free_block = 1;
 
-			while (curr_pgm != NULL) {
-				if (curr_pgm->is_max_free_block == 1) {
-					curr_pgm->is_max_free_block = 0;
-					break;
-				}
-				curr_pgm += sizeof(pgm) + curr_pgm->size;
+		while (curr_pgm != NULL) {
+			if (curr_pgm->is_max_free_block == 1) {
+				curr_pgm->is_max_free_block = 0;
+				break;
 			}
+			curr_pgm += sizeof(pgm) + curr_pgm->size;
 		}
+	}
 
-//		TODO: If neighboring blocks are also free, then merge those blocks.
-//	}
 	return;
 }
 
-//void* shalloc(size_t size) {
-//	special_alloc(size, SHARED_REGION);
-//}
+void* shalloc(size_t size) {
+	special_alloc(size, SHARED_REGION);
+}

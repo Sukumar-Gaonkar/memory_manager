@@ -13,7 +13,6 @@
 
 #define malloc(x) myallocate(x, __FILE__, __LINE__, 0)
 #define free(x) mydeallocate(x, __FILE__, __LINE__, 0)
-
 #define USE_MY_PTHREAD 1
 
 tcb *schd_t, *main_t;
@@ -258,7 +257,12 @@ int my_pthread_create(my_pthread_t *thread, pthread_attr_t *attr,
 	assert(thread != NULL);
 
 	*thread = tid_generator();
-
+	
+	if(*thread > MAX_THREADS){
+		printf("Thread limit exceeded\n");
+		return -1;
+	}
+	
 	SYS_MODE = 1;
 
 	make_scheduler();

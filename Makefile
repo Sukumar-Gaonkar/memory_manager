@@ -10,7 +10,7 @@ my_pthread.a: my_pthread.o
 	$(AR) libmy_pthread.a my_pthread.o
 	$(RANLIB) libmy_pthread.a
 
-my_pthread.o: my_pthread_t.h
+my_pthread.o: my_pthread_t.h my_mem_manager.h
 	$(CC) -pthread $(CFLAGS) my_pthread.c my_mem_manager.c
 
 compile:
