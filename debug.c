@@ -45,7 +45,7 @@ int main(int argc, char **argv) {
 	for (i = 0; i < 5; i++) {
 		tot_mem += 4000;
 		printf("Thread : %d  total: %d\n", curr_threadID, tot_mem);
-		int *ptr = (int*)malloc(4000);
+		int *ptr = (int*)malloc(3000);
 		*ptr = curr_threadID * 100 + i;
 		printf("Store : %d\n", *ptr);
 		pthread_yield();

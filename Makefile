@@ -11,7 +11,7 @@ my_pthread.a: my_pthread.o
 	$(RANLIB) libmy_pthread.a
 
 my_pthread.o: my_pthread_t.h
-	$(CC) -pthread $(CFLAGS) my_pthread.c
+	$(CC) -pthread $(CFLAGS) my_pthread.c my_mem_manager.c
 
 compile:
 	$(CC) -pthread -g -O0 -m32 -o my_mem_manager my_pthread.c my_mem_manager.c debug.c

@@ -106,6 +106,93 @@ void swap_pages(int pg1, int pg2) {
 	free(temp);
 }
 
+
+void * special_alloc(size_t size, int type) {
+
+	int alloc_complete = 0, i = 0, j = 0, old_pg = 0;
+
+//	make_scheduler();
+	init_mem_manager();
+
+	void *ret_val;
+
+//	TODO: find if any page that the thread has, contains enough space for current 'size' allocation.
+
+	// get address of first shared page.
+//	pte *curr_shared_pg = (void *) memory + TOTAL_PAGES * PAGE_SIZE;
+	int shared_pg_index;
+	int end_pg_index;
+	if (type == SHARED_REGION) {
+		shared_pg_index = TOTAL_PAGES + 1;
+		end_pg_index = TOTAL_PAGES + SHARED_PAGES;
+	} else if (type == KERNEL_REGION) {
+		shared_pg_index = TOTAL_PAGES + SHARED_PAGES + 1;
+		end_pg_index = TOTAL_PAGES + SHARED_PAGES + KERNEL_PAGES;
+	}
+
+	while (invt_pg_table[shared_pg_index].max_free < size
+			&& shared_pg_index < end_pg_index) {
+		shared_pg_index++;
+	}
+
+	if (invt_pg_table[shared_pg_index].max_free >= size) {
+		// An existing page with free space more than 'size' is found.
+
+		// Find a block in page more than or equal to 'size'
+		int curr_offset = 0;
+		pgm *itr_addr = (pgm*) (memory + (shared_pg_index * PAGE_SIZE));
+		while (curr_offset < PAGE_SIZE
+				&& !(itr_addr->free == 1
+						&& (itr_addr->size > (sizeof(pgm) + size)))) {
+			curr_offset += sizeof(pgm) + itr_addr->size;
+			itr_addr = (void *) itr_addr + sizeof(pgm) + itr_addr->size;
+		}
+
+		split_pg_block(itr_addr, size);
+
+		// Update max_block in the page
+		if (itr_addr->is_max_free_block == 1) {
+			itr_addr->is_max_free_block = 0;
+
+			int curr_offset = 0;
+			pgm *temp_addr = (pgm*) (memory + (shared_pg_index * PAGE_SIZE));
+			invt_pg_table[shared_pg_index].max_free = 0;
+			pgm *max_addr = NULL;
+
+			while (curr_offset < PAGE_SIZE) {
+				if (temp_addr->free == 1
+						&& temp_addr->size
+								> invt_pg_table[shared_pg_index].max_free) {
+					invt_pg_table[shared_pg_index].max_free = temp_addr->size;
+					max_addr = temp_addr;
+				}
+
+				curr_offset += sizeof(pgm) + temp_addr->size;
+				temp_addr = (void *) temp_addr + sizeof(pgm) + temp_addr->size;
+			}
+
+			if (max_addr != NULL) {
+				max_addr->is_max_free_block = 1;
+			}
+		}
+
+		ret_val = (void *)itr_addr + sizeof(pgm);
+//				alloc_complete = 1;
+
+	} else {
+		// The thread has used up all its virtual memory.
+		if (type == KERNEL_REGION)
+			printf("Kernel Region is full\n");
+		else if (type == SHARED_REGION)
+			printf("Shared Region is full\n");
+
+		return NULL;
+	}
+
+	return ret_val;
+
+}
+
 int read_from_swap(int mem_index, int swap_index) {
 
 	int swap_offset = swap_index * PAGE_SIZE;
@@ -385,92 +472,6 @@ void *init_pte(int pg_no) {
 	return new_pte;
 }
 
-void * special_alloc(size_t size, int type) {
-
-	int alloc_complete = 0, i = 0, j = 0, old_pg = 0;
-
-//	make_scheduler();
-	init_mem_manager();
-
-	void *ret_val;
-
-//	TODO: find if any page that the thread has, contains enough space for current 'size' allocation.
-
-	// get address of first shared page.
-//	pte *curr_shared_pg = (void *) memory + TOTAL_PAGES * PAGE_SIZE;
-	int shared_pg_index;
-	int end_pg_index;
-	if (type == SHARED_REGION) {
-		shared_pg_index = TOTAL_PAGES + 1;
-		end_pg_index = TOTAL_PAGES + SHARED_PAGES;
-	} else if (type == KERNEL_REGION) {
-		shared_pg_index = TOTAL_PAGES + SHARED_PAGES + 1;
-		end_pg_index = TOTAL_PAGES + SHARED_PAGES + KERNEL_PAGES;
-	}
-
-	while (invt_pg_table[shared_pg_index].max_free < size
-			&& shared_pg_index < end_pg_index) {
-		shared_pg_index++;
-	}
-
-	if (invt_pg_table[shared_pg_index].max_free >= size) {
-		// An existing page with free space more than 'size' is found.
-
-		// Find a block in page more than or equal to 'size'
-		int curr_offset = 0;
-		pgm *itr_addr = (pgm*) (memory + (shared_pg_index * PAGE_SIZE));
-		while (curr_offset < PAGE_SIZE
-				&& !(itr_addr->free == 1
-						&& (itr_addr->size > (sizeof(pgm) + size)))) {
-			curr_offset += sizeof(pgm) + itr_addr->size;
-			itr_addr = (void *) itr_addr + sizeof(pgm) + itr_addr->size;
-		}
-
-		split_pg_block(itr_addr, size);
-
-		// Update max_block in the page
-		if (itr_addr->is_max_free_block == 1) {
-			itr_addr->is_max_free_block = 0;
-
-			int curr_offset = 0;
-			pgm *temp_addr = (pgm*) (memory + (shared_pg_index * PAGE_SIZE));
-			invt_pg_table[shared_pg_index].max_free = 0;
-			pgm *max_addr = NULL;
-
-			while (curr_offset < PAGE_SIZE) {
-				if (temp_addr->free == 1
-						&& temp_addr->size
-								> invt_pg_table[shared_pg_index].max_free) {
-					invt_pg_table[shared_pg_index].max_free = temp_addr->size;
-					max_addr = temp_addr;
-				}
-
-				curr_offset += sizeof(pgm) + temp_addr->size;
-				temp_addr = (void *) temp_addr + sizeof(pgm) + temp_addr->size;
-			}
-
-			if (max_addr != NULL) {
-				max_addr->is_max_free_block = 1;
-			}
-		}
-
-		ret_val = itr_addr + sizeof(pgm);
-//				alloc_complete = 1;
-
-	} else {
-		// The thread has used up all its virtual memory.
-		if (type == KERNEL_REGION)
-			printf("Kernel Region is full\n");
-		else if (type == SHARED_REGION)
-			printf("Shared Region is full\n");
-
-		return NULL;
-	}
-
-	return ret_val;
-
-}
-
 void * myallocate(size_t size, char *filename, int line_number, int flag) {
 
 	int alloc_complete = 0, i = 0, j = 0, old_pg = 0;
@@ -704,9 +705,10 @@ void * myallocate(size_t size, char *filename, int line_number, int flag) {
 void mydeallocate(void * ptr, char *filename, int line_number, int flag) {
 
 	int alloc_complete = 0;
-	if (flag != THREADREQ) {
-		free(ptr);
-	} else {
+//	if (flag != THREADREQ) {
+//		free(ptr);
+//
+//	} else {
 		make_scheduler();
 
 		pgm *pg_meta = ptr - sizeof(pgm);
@@ -719,18 +721,18 @@ void mydeallocate(void * ptr, char *filename, int line_number, int flag) {
 		if (invt_pg_table[inv_pg_index].max_free < pg_meta->size) {
 			invt_pg_table[inv_pg_index].max_free = pg_meta->size;
 			pg_meta->is_max_free_block = 1;
-			//point of this????
+
 			while (curr_pgm != NULL) {
 				if (curr_pgm->is_max_free_block == 1) {
 					curr_pgm->is_max_free_block = 0;
 					break;
 				}
-				curr_pgm = sizeof(pgm) + curr_pgm->size;
+				curr_pgm += sizeof(pgm) + curr_pgm->size;
 			}
 		}
 
 //		TODO: If neighboring blocks are also free, then merge those blocks.
-	}
+//	}
 	return;
 }
 
